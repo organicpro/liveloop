@@ -152,7 +152,8 @@ export default function Home() {
       const bundle = await loadFfmpeg();
       const { ffmpeg, fetchFile } = bundle;
 
-      await Promise.allSettled([ffmpeg.deleteFile("input.mp4"), ffmpeg.deleteFile("audio.m4a"), ffmpeg.deleteFile("output.mp4")]);
+      const duration = Math.max(1, Math.floor(targetSeconds));
+      await Promise.allSettled([ffmpeg.deleteFile("input.mp4"), ffmpeg.deleteFile("audio.m4a"), ffmpeg.deleteFile("render.mp4"), ffmpeg.deleteFile("output.mp4")]);
       await ffmpeg.writeFile("input.mp4", await fetchFile(file));
 
       const audioName = "audio.m4a";
@@ -169,23 +170,29 @@ export default function Home() {
 
         await ffmpeg.exec([
           "-y",
+          "-fflags",
+          "+genpts",
           "-stream_loop",
           "-1",
+          "-t",
+          String(duration),
           "-i",
           "input.mp4",
           "-stream_loop",
           "-1",
+          "-t",
+          String(duration),
           "-i",
           audioName,
           "-filter_complex",
-          `[0:v:0]trim=duration=${targetSeconds},setpts=PTS-STARTPTS,scale=trunc(iw/2)*2:trunc(ih/2)*2[v];[1:a:0]atrim=duration=${targetSeconds},asetpts=PTS-STARTPTS,volume=${volume / 100}[a]`,
+          `[0:v:0]setpts=PTS-STARTPTS,scale=trunc(iw/2)*2:trunc(ih/2)*2[v];[1:a:0]asetpts=PTS-STARTPTS,volume=${volume / 100}[a]`,
           "-map",
           "[v]",
           "-map",
           "[a]",
-          "-t",
-          String(targetSeconds),
           "-shortest",
+          "-t",
+          String(duration),
           "-c:v",
           "libx264",
           "-preset",
@@ -203,18 +210,31 @@ export default function Home() {
       } else {
         await ffmpeg.exec([
           "-y",
+          "-fflags",
+          "+genpts",
           "-stream_loop",
           "-1",
+          "-t",
+          String(duration),
           "-i",
           "input.mp4",
-          "-t",
-          String(targetSeconds),
           "-map",
           "0:v:0?",
           "-map",
           "0:a:0?",
-          "-c",
-          "copy",
+          "-shortest",
+          "-t",
+          String(duration),
+          "-c:v",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
           "-movflags",
           "+faststart",
           "output.mp4",
