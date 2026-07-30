@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  --font-geist-sans: Arial, Helvetica, sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
   --background: #090205;
   --foreground: #fff1f3;
   --muted: #c39ea6;
@@ -25,7 +27,7 @@ body {
     radial-gradient(circle at top left, rgba(255, 74, 95, 0.14), transparent 28%),
     linear-gradient(180deg, #130509 0%, #050102 100%);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, sans-serif;
+  font-family: var(--font-geist-sans);
 }
 a { color: inherit; text-decoration: none; }
 button, input { font: inherit; }
@@ -117,6 +119,19 @@ input:focus {
   align-items: center;
   flex-wrap: wrap;
   font-size: 0.92rem;
+}
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0 2px;
+  font-size: 0.9rem;
+}
+.switch-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-strong);
 }
 button {
   width: fit-content;

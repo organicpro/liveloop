@@ -12,9 +12,13 @@ function asNumber(value: FormDataEntryValue | null) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-function estimateSize(size: number, sourceSeconds: number, targetSeconds: number) {
+function asBoolean(value: FormDataEntryValue | null) {
+  return value === "1" || value === "true";
+}
+
+function estimateSize(size: number, sourceSeconds: number, targetSeconds: number, audioBytes = 0) {
   if (!size || !sourceSeconds || !targetSeconds) return 0;
-  return Math.round((size * targetSeconds) / sourceSeconds);
+  return Math.round((size * targetSeconds) / sourceSeconds) + audioBytes;
 }
 
 function safeName(name: string) {
@@ -23,12 +27,11 @@ function safeName(name: string) {
 
 async function resolveFfmpeg() {
   const localBinary = path.join(process.cwd(), "node_modules", "ffmpeg-static", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
-  await access(localBinary).then(() => true, () => false);
   try {
     await access(localBinary);
     return localBinary;
   } catch {
-    return ffmpegStaticPath;
+    return ffmpegStaticPath ?? "";
   }
 }
 
@@ -79,8 +82,10 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const file = formData.get("video");
+  const audio = formData.get("audio");
   const targetSeconds = asNumber(formData.get("targetSeconds"));
   const sourceSeconds = asNumber(formData.get("sourceSeconds"));
+  const addAudioEnabled = asBoolean(formData.get("addAudioEnabled"));
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Envie um video valido." }, { status: 400 });
@@ -94,41 +99,86 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Para este teste local, envie videos de ate 250 MB." }, { status: 400 });
   }
 
+  if (addAudioEnabled && !(audio instanceof File)) {
+    return NextResponse.json({ error: "Ative o audio e envie um arquivo de audio valido." }, { status: 400 });
+  }
+
   const tempDir = path.join(os.tmpdir(), "extender-video-ia");
   await mkdir(tempDir, { recursive: true });
 
   const baseName = safeName(file.name.replace(/\.[^.]+$/, ""));
   const inputPath = path.join(tempDir, `${crypto.randomUUID()}-${safeName(file.name)}`);
   const outputPath = path.join(tempDir, `${crypto.randomUUID()}-${baseName}-extendido.mp4`);
+  const audioPath = addAudioEnabled && audio instanceof File
+    ? path.join(tempDir, `${crypto.randomUUID()}-${safeName(audio.name)}`)
+    : null;
 
   await writeFile(inputPath, Buffer.from(await file.arrayBuffer()));
+  if (audioPath && audio instanceof File) {
+    await writeFile(audioPath, Buffer.from(await audio.arrayBuffer()));
+  }
 
   const timeoutMs = Math.max(90_000, Math.min(600_000, targetSeconds * 2500));
-  let result = await runFfmpeg(binary, [
-    "-y", "-stream_loop", "-1", "-i", inputPath, "-t", String(targetSeconds),
-    "-map", "0:v:0?", "-map", "0:a:0?", "-c", "copy", "-movflags", "+faststart", outputPath,
-  ], timeoutMs);
+  let result;
 
-  if (!result.ok) {
-    await unlink(outputPath).catch(() => undefined);
+  if (audioPath) {
     result = await runFfmpeg(binary, [
-      "-y", "-stream_loop", "-1", "-i", inputPath, "-t", String(targetSeconds),
-      "-map", "0:v:0?", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "ultrafast",
-      "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
-      "-movflags", "+faststart", outputPath,
+      "-y",
+      "-stream_loop",
+      "-1",
+      "-i",
+      inputPath,
+      "-stream_loop",
+      "-1",
+      "-i",
+      audioPath,
+      "-t",
+      String(targetSeconds),
+      "-map",
+      "0:v:0?",
+      "-map",
+      "1:a:0?",
+      "-c:v",
+      "copy",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "192k",
+      "-movflags",
+      "+faststart",
+      outputPath,
+    ], timeoutMs);
+  } else {
+    result = await runFfmpeg(binary, [
+      "-y",
+      "-stream_loop",
+      "-1",
+      "-i",
+      inputPath,
+      "-t",
+      String(targetSeconds),
+      "-map",
+      "0:v:0?",
+      "-map",
+      "0:a:0?",
+      "-c",
+      "copy",
+      "-movflags",
+      "+faststart",
+      outputPath,
     ], timeoutMs);
   }
 
   if (!result.ok) {
-    await Promise.allSettled([unlink(inputPath), unlink(outputPath)]);
+    await Promise.allSettled([unlink(inputPath), audioPath ? unlink(audioPath) : Promise.resolve(), unlink(outputPath)]);
     const error = result.timedOut ? "O processamento passou do tempo limite local." : "Nao consegui extender o video.";
     return NextResponse.json({ error, details: result.stderr.slice(-1200) }, { status: 500 });
   }
 
   const output = await readFile(outputPath);
-  const estimatedBytes = estimateSize(file.size, sourceSeconds, targetSeconds);
+  const estimatedBytes = estimateSize(file.size, sourceSeconds, targetSeconds, addAudioEnabled && audio instanceof File ? audio.size : 0);
 
-  await Promise.allSettled([unlink(inputPath), unlink(outputPath)]);
+  await Promise.allSettled([unlink(inputPath), audioPath ? unlink(audioPath) : Promise.resolve(), unlink(outputPath)]);
 
   return new NextResponse(output, {
     headers: {

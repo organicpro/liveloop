@@ -33,9 +33,11 @@ function formatDuration(seconds: number) {
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [addAudio, setAddAudio] = useState(false);
   const [durationInput, setDurationInput] = useState("1m");
   const [state, setState] = useState<State>("idle");
-  const [message, setMessage] = useState("Upload a Video and set the final duration.");
+  const [message, setMessage] = useState("Upload a video and set the final duration.");
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [estimatedBytes, setEstimatedBytes] = useState(0);
   const [sourceSeconds, setSourceSeconds] = useState(0);
@@ -46,9 +48,11 @@ export default function Home() {
 
   useEffect(() => {
     if (file && sourceSeconds && targetSeconds) {
-      setEstimatedBytes(Math.round((file.size * targetSeconds) / Math.max(1, sourceSeconds)));
+      const videoEstimate = Math.round((file.size * targetSeconds) / Math.max(1, sourceSeconds));
+      const audioEstimate = addAudio && audioFile ? audioFile.size : 0;
+      setEstimatedBytes(videoEstimate + audioEstimate);
     }
-  }, [file, sourceSeconds, targetSeconds]);
+  }, [file, sourceSeconds, targetSeconds, addAudio, audioFile]);
 
   useEffect(() => {
     if (state !== "loading") {
@@ -59,7 +63,7 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [state]);
 
-  async function inspectFile(nextFile: File | null) {
+  async function inspectVideo(nextFile: File | null) {
     setFile(nextFile);
     setDownloadUrl((current) => {
       if (current) URL.revokeObjectURL(current);
@@ -68,7 +72,7 @@ export default function Home() {
     setState("idle");
 
     if (!nextFile) {
-      setMessage("Upload a Video and set the final duration.");
+      setMessage("Upload a video and set the final duration.");
       setEstimatedBytes(0);
       setSourceSeconds(0);
       return;
@@ -80,35 +84,45 @@ export default function Home() {
     video.src = url;
     await new Promise<void>((resolve, reject) => {
       video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error("Nao consegui ler a duracao do Video."));
+      video.onerror = () => reject(new Error("Nao consegui ler a duracao do video."));
     });
     URL.revokeObjectURL(url);
     setSourceSeconds(video.duration);
     setMessage(`Video loaded. Original duration: ${formatDuration(video.duration)}.`);
   }
 
+  async function inspectAudio(nextFile: File | null) {
+    setAudioFile(nextFile);
+    if (!nextFile) return;
+    setMessage(`Audio loaded: ${nextFile.name}.`);
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!file || !targetSeconds) {
+    if (!file || !targetSeconds || (addAudio && !audioFile)) {
       setState("error");
-      setMessage("Choose a valid Video and duration.");
+      setMessage(addAudio ? "Choose a valid video, duration and audio file." : "Choose a valid video and duration.");
       return;
     }
 
     setState("loading");
-    setMessage("Extension in progress. Larger files may take a few minutes.");
+    setMessage(addAudio ? "Extension and audio mix in progress." : "Extension in progress. Larger files may take a few minutes.");
 
     const formData = new FormData();
-    formData.append("Video", file);
+    formData.append("video", file);
     formData.append("targetSeconds", String(targetSeconds));
     formData.append("sourceSeconds", String(sourceSeconds || 0));
+    formData.append("addAudioEnabled", addAudio ? "1" : "0");
+    if (addAudio && audioFile) {
+      formData.append("audio", audioFile);
+    }
 
     const response = await fetch("/api/extend", { method: "POST", body: formData });
 
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
       setState("error");
-      setMessage(payload?.error ?? "Failed to extend the Video.");
+      setMessage(payload?.error ?? "Failed to extend the video.");
       return;
     }
 
@@ -116,7 +130,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob);
     setDownloadUrl(url);
     setState("done");
-    setMessage("Extended Video ready for download.");
+    setMessage(addAudio ? "Extended video with audio ready for download." : "Extended video ready for download.");
     const headerEstimate = Number(response.headers.get("X-Extender-Estimated-Bytes") ?? 0);
     if (headerEstimate) setEstimatedBytes(headerEstimate);
   }
@@ -127,7 +141,7 @@ export default function Home() {
         <div>
           <p className="eyebrow">Extendr</p>
           <h1>Video Extension Timer</h1>
-          <p className="lede">Extend your Video to the exact length.</p>
+          <p className="lede">Extend your video to the exact length.</p>
         </div>
         <div className="stats">
           <div>
@@ -135,7 +149,7 @@ export default function Home() {
             <strong>{targetSeconds ? formatDuration(targetSeconds) : "--"}</strong>
           </div>
           <div>
-            <span>Video original</span>
+            <span>Original video</span>
             <strong>{file ? formatDuration(sourceSeconds) : "--"}</strong>
           </div>
           <div>
@@ -151,13 +165,41 @@ export default function Home() {
             Video
             <input
               type="file"
-              accept="Video/*"
-              onChange={(event) => inspectFile(event.target.files?.[0] ?? null).catch((error) => {
+              accept="video/*"
+              onChange={(event) => inspectVideo(event.target.files?.[0] ?? null).catch((error) => {
                 setState("error");
                 setMessage(error instanceof Error ? error.message : "Nao consegui ler o arquivo.");
               })}
             />
           </label>
+
+          <label className="switch-row">
+            <span>Add audio</span>
+            <input
+              type="checkbox"
+              checked={addAudio}
+              onChange={(event) => {
+                setAddAudio(event.target.checked);
+                if (!event.target.checked) {
+                  setAudioFile(null);
+                }
+              }}
+            />
+          </label>
+
+          {addAudio ? (
+            <label>
+              Audio file
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={(event) => inspectAudio(event.target.files?.[0] ?? null).catch((error) => {
+                  setState("error");
+                  setMessage(error instanceof Error ? error.message : "Nao consegui ler o audio.");
+                })}
+              />
+            </label>
+          ) : null}
 
           <label>
             Final duration
@@ -174,7 +216,7 @@ export default function Home() {
             <span>Multiplier: {ratio ? `${ratio.toFixed(1)}x` : "--"}</span>
           </div>
 
-          <button type="submit" disabled={!file || !targetSeconds || state === "loading"}>
+          <button type="submit" disabled={!file || !targetSeconds || state === "loading" || (addAudio && !audioFile)}>
             {state === "loading" ? `Extending video... ${elapsed}s` : "Extend video"}
           </button>
         </form>
@@ -182,7 +224,7 @@ export default function Home() {
         <div className="status">
           <p>{message}</p>
           {downloadUrl ? (
-            <a href={downloadUrl} download="extender-Video-ia.mp4">
+            <a href={downloadUrl} download="extender-video-ia.mp4">
               Download MP4
             </a>
           ) : null}
