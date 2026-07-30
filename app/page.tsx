@@ -97,7 +97,7 @@ export default function Home() {
     });
     URL.revokeObjectURL(url);
     setSourceSeconds(video.duration);
-    setMessage(`V?deo carregado: ${formatDuration(video.duration)}.`);
+    setMessage(`Vídeo carregado: ${formatDuration(video.duration)}.`);
   }
 
   async function inspectAudio(nextFile: File | null) {
@@ -177,20 +177,25 @@ export default function Home() {
           "-1",
           "-i",
           audioName,
+          "-filter_complex",
+          `[0:v:0]trim=duration=${targetSeconds},setpts=PTS-STARTPTS,scale=trunc(iw/2)*2:trunc(ih/2)*2[v];[1:a:0]atrim=duration=${targetSeconds},asetpts=PTS-STARTPTS,volume=${volume / 100}[a]`,
+          "-map",
+          "[v]",
+          "-map",
+          "[a]",
           "-t",
           String(targetSeconds),
-          "-map",
-          "0:v:0?",
-          "-map",
-          "1:a:0?",
-          "-filter:a",
-          `volume=${volume / 100}`,
+          "-shortest",
           "-c:v",
-          "copy",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-pix_fmt",
+          "yuv420p",
           "-c:a",
           "aac",
           "-b:a",
-          "192k",
+          "128k",
           "-movflags",
           "+faststart",
           "output.mp4",
@@ -223,7 +228,7 @@ export default function Home() {
         return url;
       });
       setState("done");
-      setMessage(addAudio ? "V?deo com áudio pronto para baixar." : "V?deo pronto para baixar.");
+      setMessage(addAudio ? "Vídeo com áudio pronto para baixar." : "Vídeo pronto para baixar.");
       if (estimatedBytes) setEstimatedBytes(estimatedBytes);
     } catch (error) {
       setState("error");
