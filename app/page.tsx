@@ -35,7 +35,7 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [durationInput, setDurationInput] = useState("1m");
   const [state, setState] = useState<State>("idle");
-  const [message, setMessage] = useState("Envie um video e defina a duracao final.");
+  const [message, setMessage] = useState("Upload a Video and set the final duration.");
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [estimatedBytes, setEstimatedBytes] = useState(0);
   const [sourceSeconds, setSourceSeconds] = useState(0);
@@ -68,7 +68,7 @@ export default function Home() {
     setState("idle");
 
     if (!nextFile) {
-      setMessage("Envie um video e defina a duracao final.");
+      setMessage("Upload a Video and set the final duration.");
       setEstimatedBytes(0);
       setSourceSeconds(0);
       return;
@@ -80,26 +80,26 @@ export default function Home() {
     video.src = url;
     await new Promise<void>((resolve, reject) => {
       video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error("Nao consegui ler a duracao do video."));
+      video.onerror = () => reject(new Error("Nao consegui ler a duracao do Video."));
     });
     URL.revokeObjectURL(url);
     setSourceSeconds(video.duration);
-    setMessage(`Video carregado. Duracao original: ${formatDuration(video.duration)}.`);
+    setMessage(`Video loaded. Original duration: ${formatDuration(video.duration)}.`);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file || !targetSeconds) {
       setState("error");
-      setMessage("Escolha um video e uma duracao valida.");
+      setMessage("Choose a valid Video and duration.");
       return;
     }
 
     setState("loading");
-    setMessage("Extensao em andamento. Arquivos grandes podem levar alguns minutos.");
+    setMessage("Extension in progress. Larger files may take a few minutes.");
 
     const formData = new FormData();
-    formData.append("video", file);
+    formData.append("Video", file);
     formData.append("targetSeconds", String(targetSeconds));
     formData.append("sourceSeconds", String(sourceSeconds || 0));
 
@@ -108,7 +108,7 @@ export default function Home() {
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
       setState("error");
-      setMessage(payload?.error ?? "Falha ao extender o video.");
+      setMessage(payload?.error ?? "Failed to extend the Video.");
       return;
     }
 
@@ -116,7 +116,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob);
     setDownloadUrl(url);
     setState("done");
-    setMessage("Video estendido pronto para download.");
+    setMessage("Extended Video ready for download.");
     const headerEstimate = Number(response.headers.get("X-Extender-Estimated-Bytes") ?? 0);
     if (headerEstimate) setEstimatedBytes(headerEstimate);
   }
@@ -125,13 +125,13 @@ export default function Home() {
     <main className="shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">Extender Video IA</p>
-          <h1>Timer de extensao</h1>
-          <p className="lede">Estenda seu video para a duracao exata.</p>
+          <p className="eyebrow">Extendr</p>
+          <h1>Video Extension Timer</h1>
+          <p className="lede">Extend your Video to the exact length.</p>
         </div>
         <div className="stats">
           <div>
-            <span>Horas</span>
+            <span>Hours</span>
             <strong>{targetSeconds ? formatDuration(targetSeconds) : "--"}</strong>
           </div>
           <div>
@@ -139,7 +139,7 @@ export default function Home() {
             <strong>{file ? formatDuration(sourceSeconds) : "--"}</strong>
           </div>
           <div>
-            <span>Estimativa</span>
+            <span>Estimate</span>
             <strong>{estimatedBytes ? formatBytes(estimatedBytes) : "--"}</strong>
           </div>
         </div>
@@ -151,7 +151,7 @@ export default function Home() {
             Video
             <input
               type="file"
-              accept="video/*"
+              accept="Video/*"
               onChange={(event) => inspectFile(event.target.files?.[0] ?? null).catch((error) => {
                 setState("error");
                 setMessage(error instanceof Error ? error.message : "Nao consegui ler o arquivo.");
@@ -160,7 +160,7 @@ export default function Home() {
           </label>
 
           <label>
-            Duracao final
+            Final duration
             <input
               type="text"
               value={durationInput}
@@ -170,20 +170,20 @@ export default function Home() {
           </label>
 
           <div className="helper">
-            <span>Atalho: 10m, 1h 30m, 24m ou minutos inteiros.</span>
-            <span>Multiplicador: {ratio ? `${ratio.toFixed(1)}x` : "--"}</span>
+            <span>Shortcut: 10m, 1h 30m, 24m or whole minutes.</span>
+            <span>Multiplier: {ratio ? `${ratio.toFixed(1)}x` : "--"}</span>
           </div>
 
           <button type="submit" disabled={!file || !targetSeconds || state === "loading"}>
-            {state === "loading" ? `Extendendo video... ${elapsed}s` : "Extender video"}
+            {state === "loading" ? `Extending video... ${elapsed}s` : "Extend video"}
           </button>
         </form>
 
         <div className="status">
           <p>{message}</p>
           {downloadUrl ? (
-            <a href={downloadUrl} download="extender-video-ia.mp4">
-              Baixar MP4
+            <a href={downloadUrl} download="extender-Video-ia.mp4">
+              Download MP4
             </a>
           ) : null}
         </div>

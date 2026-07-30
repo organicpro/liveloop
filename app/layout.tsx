@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Extender Video IA",
-  description: "Estenda videos para uma duracao exata e baixe o MP4 final.",
+  title: "Extendr",
+  description: "Extend videos to an exact duration and download the final MP4.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
