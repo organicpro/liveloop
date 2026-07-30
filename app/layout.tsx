@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Extendr",
-  description: "Extend videos to an exact duration and download the final MP4.",
+  description: "Estenda v?deos para uma duração exata e adicione áudio opcional.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

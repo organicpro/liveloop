@@ -40,9 +40,12 @@ async function runFfmpeg(binary: string, args: string[], timeoutMs: number) {
     let child;
     let stderr = "";
     let settled = false;
+    const isWindows = process.platform === "win32";
+    const command = isWindows ? "cmd.exe" : binary;
+    const commandArgs = isWindows ? ["/c", binary, ...args] : args;
 
     try {
-      child = spawn(binary, args, { stdio: ["ignore", "ignore", "pipe"] });
+      child = spawn(command, commandArgs, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
     } catch (error) {
       resolve({ ok: false, stderr: error instanceof Error ? error.message : String(error), timedOut: false });
       return;
@@ -86,6 +89,7 @@ export async function POST(request: Request) {
   const targetSeconds = asNumber(formData.get("targetSeconds"));
   const sourceSeconds = asNumber(formData.get("sourceSeconds"));
   const addAudioEnabled = asBoolean(formData.get("addAudioEnabled"));
+  const audioVolume = Math.max(0, Math.min(150, asNumber(formData.get("audioVolume")) || 70));
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Envie um video valido." }, { status: 400 });
@@ -119,6 +123,7 @@ export async function POST(request: Request) {
   }
 
   const timeoutMs = Math.max(90_000, Math.min(600_000, targetSeconds * 2500));
+  const volumeFilter = `volume=${audioVolume / 100}`;
   let result;
 
   if (audioPath) {
@@ -138,6 +143,8 @@ export async function POST(request: Request) {
       "0:v:0?",
       "-map",
       "1:a:0?",
+      "-filter:a",
+      volumeFilter,
       "-c:v",
       "copy",
       "-c:a",
@@ -176,7 +183,7 @@ export async function POST(request: Request) {
   }
 
   const output = await readFile(outputPath);
-  const estimatedBytes = estimateSize(file.size, sourceSeconds, targetSeconds, addAudioEnabled && audio instanceof File ? audio.size : 0);
+  const estimatedBytes = estimateSize(file.size, sourceSeconds, targetSeconds, addAudioEnabled && audio instanceof File ? Math.round(audio.size * 0.1) : 0);
 
   await Promise.allSettled([unlink(inputPath), audioPath ? unlink(audioPath) : Promise.resolve(), unlink(outputPath)]);
 
